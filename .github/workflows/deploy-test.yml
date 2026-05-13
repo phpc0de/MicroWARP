@@ -14,7 +14,7 @@ jobs:
     
     steps:
       - name: 📥 检出项目源码
-        uses: actions/checkout@v4
+        uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11
 
       - name: 🔨 从源码构建 Docker 镜像 (Local Build)
         # 不拉取 ghcr，直接用当前目录的 Dockerfile 和 entrypoint.sh 现场编译

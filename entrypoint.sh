@@ -11,14 +11,7 @@ github_auth_header() {
 build_wgcf_download_url() {
     WGCF_VER=$1
     WGCF_ARCH=$2
-    RAW_URL="https://github.com/ViRb3/wgcf/releases/download/v${WGCF_VER}/wgcf_${WGCF_VER}_linux_${WGCF_ARCH}"
-
-    if [ -n "${GH_PROXY:-}" ]; then
-        echo "${GH_PROXY%/}/${RAW_URL}"
-        return 0
-    fi
-
-    echo "$RAW_URL"
+    echo "https://github.com/phpc0de/wgcf/releases/download/v${WGCF_VER}/wgcf_${WGCF_VER}_linux_${WGCF_ARCH}"
 }
 
 if [ "${MICROWARP_TEST_MODE:-0}" = "1" ]; then
@@ -43,9 +36,9 @@ if [ ! -f "$WG_CONF" ]; then
 
     GITHUB_AUTH_HEADER=$(github_auth_header)
     if [ -n "$GITHUB_AUTH_HEADER" ]; then
-        WGCF_VER=$(curl -sL -H "$GITHUB_AUTH_HEADER" "https://api.github.com/repos/ViRb3/wgcf/releases/latest" | grep '"tag_name"' | sed 's/.*"v\(.*\)".*/\1/')
+        WGCF_VER=$(curl -sL -H "$GITHUB_AUTH_HEADER" "https://api.github.com/repos/phpc0de/wgcf/releases/latest" | grep '"tag_name"' | sed 's/.*"v\(.*\)".*/\1/')
     else
-        WGCF_VER=$(curl -sL "https://api.github.com/repos/ViRb3/wgcf/releases/latest" | grep '"tag_name"' | sed 's/.*"v\(.*\)".*/\1/')
+        WGCF_VER=$(curl -sL "https://api.github.com/repos/phpc0de/wgcf/releases/latest" | grep '"tag_name"' | sed 's/.*"v\(.*\)".*/\1/')
     fi
     echo "==> [MicroWARP] 检测到最新 wgcf 版本: v${WGCF_VER}"
     wget --timeout=15 -qO wgcf "$(build_wgcf_download_url "$WGCF_VER" "$WGCF_ARCH")"

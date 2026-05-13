@@ -1,6 +1,6 @@
 # MicroWARP 🚀
 
-[![Docker Pulls](https://img.shields.io/badge/docker-ready-blue.svg)](https://github.com/ccbkkb/MicroWARP/packages)
+[![Docker Pulls](https://img.shields.io/badge/docker-ready-blue.svg)](https://github.com/phpc0de/MicroWARP/packages)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 > *请严格遵守您所在国家和地区的法律法规。任何因违法违规使用本项目而引发的法律纠纷或后果，均与本项目及作者无关。*
@@ -60,7 +60,7 @@ Map port `1080` and grant `NET_ADMIN` privileges. Create a `docker-compose.yml`:
 ```yaml
 services:
   microwarp:
-    image: ghcr.io/ccbkkb/microwarp:latest
+    image: ghcr.io/phpc0de/microwarp:latest
     container_name: microwarp
     restart: always
     ports:
@@ -132,7 +132,7 @@ MicroWARP supports environment variables to customize your setup while keeping t
 ```yaml
 services:
   microwarp:
-    image: ghcr.io/ccbkkb/microwarp:latest
+    image: ghcr.io/phpc0de/microwarp:latest
     container_name: microwarp
     restart: always
     ports:
@@ -164,7 +164,6 @@ MicroWARP 支持通过环境变量进行参数定制：
       - BIND_PORT=1080        # 监听端口 (默认 1080)
       - SOCKS_USER=admin      # SOCKS5 认证用户名 (留空则为无密码模式)
       - SOCKS_PASS=123456     # SOCKS5 认证密码
-      - GH_PROXY=https://github.ednovas.xyz # 代理 wgcf 二进制下载地址
       
       # ⚠️ 网络连通性优化 (Port Hopping)
       # 针对部分对 UDP 2408 端口存在 QoS 限制的机房（如 DMIT、搬瓦工等）。
@@ -188,10 +187,10 @@ nohup gost -F=socks5://admin:123456@127.0.0.1:1080 -L=http://127.0.0.1:8081 > /d
 
 ## 📈 Star History
 
-<a href="https://star-history.com/#ccbkkb/MicroWARP&Date">
+<a href="https://star-history.com/#phpc0de/MicroWARP&Date">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=ccbkkb/MicroWARP&type=Date&theme=dark" />
-    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=ccbkkb/MicroWARP&type=Date" />
-    <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=ccbkkb/MicroWARP&type=Date" />
+    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=phpc0de/MicroWARP&type=Date&theme=dark" />
+    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=phpc0de/MicroWARP&type=Date" />
+    <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=phpc0de/MicroWARP&type=Date" />
   </picture>
 </a>

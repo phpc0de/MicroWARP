@@ -5,7 +5,7 @@ FROM alpine:latest AS builder
 # 安装 C 语言编译环境
 RUN apk add --no-cache build-base git
 # 从官方仓库拉取源码并编译 (只需 2 秒)
-RUN git clone https://github.com/rofl0r/microsocks.git /src && \
+RUN git clone https://github.com/phpc0de/microsocks.git /src && \
     cd /src && make
 
 # ==========================================
