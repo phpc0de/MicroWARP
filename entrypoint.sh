@@ -212,6 +212,9 @@ mkdir -p "$(dirname "$WGCF_BIN")"
 
 echo "==> [MicroWARP] 挂载检查: $(dirname "$WGCF_BIN") 内容如下"
 ls -la "$(dirname "$WGCF_BIN")" || true
+echo "==> [MicroWARP] 挂载检查: /etc/wireguard 内容如下"
+ls -la /etc/wireguard || true
+echo "==> [MicroWARP] 当前工作目录: $(pwd)"
 if [ -f "$WGCF_BIN" ]; then
     echo "==> [MicroWARP] 检测到缓存二进制: $WGCF_BIN"
 else
@@ -230,6 +233,9 @@ if [ ! -f "$WG_CONF" ]; then
     elif [ -f "$WGCF_ACCOUNT_PERSIST" ] && [ ! -f "wgcf-account.toml" ]; then
         cp "$WGCF_ACCOUNT_PERSIST" ./wgcf-account.toml
         echo "==> [MicroWARP] 检测到持久化账号文件，已恢复: $WGCF_ACCOUNT_PERSIST"
+    fi
+    if [ ! -f "$WGCF_ACCOUNT_LOCAL_PERSIST" ] && [ ! -f "$WGCF_ACCOUNT_PERSIST" ]; then
+        echo "==> [WARN] 未检测到持久化账号文件，将执行注册流程"
     fi
 
     ARCH=$(uname -m)
@@ -317,17 +323,49 @@ if [ ! -f "$WG_CONF" ]; then
         else
             "$WGCF_BIN" register --accept-tos > /dev/null
         fi
+
+        if [ ! -f "wgcf-account.toml" ]; then
+            echo "==> [ERROR] 注册后未发现 wgcf-account.toml"
+            echo "==> [DEBUG] 当前目录文件列表:"
+            ls -la . || true
+            exit 1
+        fi
+        echo "==> [MicroWARP] 注册成功，已生成账号文件: $(pwd)/wgcf-account.toml"
     else
         echo "==> [MicroWARP] 检测到本地账号文件，跳过注册"
     fi
 
+    echo "==> [MicroWARP] 账号文件检查:"
+    ls -la ./wgcf-account.toml 2>/dev/null || echo "==> [DEBUG] 当前目录无 wgcf-account.toml"
+    ls -la "$WGCF_ACCOUNT_PERSIST" 2>/dev/null || echo "==> [DEBUG] /etc/wireguard 无持久化账号文件"
+    ls -la "$WGCF_ACCOUNT_LOCAL_PERSIST" 2>/dev/null || echo "==> [DEBUG] 本地挂载目录无持久化账号文件"
+
     echo "==> [MicroWARP] 正在生成 WireGuard 配置文件..."
-    "$WGCF_BIN" generate > /dev/null
+    GENERATE_OUTPUT=$("$WGCF_BIN" generate 2>&1) || {
+        echo "$GENERATE_OUTPUT"
+        if printf '%s' "$GENERATE_OUTPUT" | grep -qi "no value given for required property enabled"; then
+            echo "==> [MicroWARP] Team API 返回结构与当前 wgcf generate 不兼容，停止重试，请升级 wgcf 版本"
+            exit 0
+        fi
+        if printf '%s' "$GENERATE_OUTPUT" | grep -qi "source device response missing peer config"; then
+            echo "==> [MicroWARP] Team source device 配置不完整，停止重试"
+            exit 0
+        fi
+        exit 1
+    }
+    echo "$GENERATE_OUTPUT" > /dev/null
+
+    if [ ! -f "wgcf-profile.conf" ]; then
+        echo "==> [ERROR] generate 执行后未产出 wgcf-profile.conf"
+        exit 1
+    fi
 
     cp ./wgcf-account.toml "$WGCF_ACCOUNT_PERSIST"
     echo "==> [MicroWARP] 账号文件已持久化: $WGCF_ACCOUNT_PERSIST"
     cp ./wgcf-account.toml "$WGCF_ACCOUNT_LOCAL_PERSIST"
     echo "==> [MicroWARP] 账号文件已持久化到本地目录: $WGCF_ACCOUNT_LOCAL_PERSIST"
+    ls -la /etc/wireguard || true
+    ls -la "$(dirname "$WGCF_BIN")" || true
 
     mv wgcf-profile.conf "$WG_CONF"
 

@@ -1,6 +1,9 @@
 name: Build and Publish MicroWARP
 
 on:
+  push:
+    tags:
+      - "v*"
   workflow_dispatch:
     inputs:
       version:
@@ -29,7 +32,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          RAW_VERSION="${{ inputs.version }}"
+          RAW_VERSION="${{ github.event_name == 'workflow_dispatch' && inputs.version || github.ref_name }}"
           VERSION="${RAW_VERSION#v}"
           if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$ ]]; then
             echo "Invalid version: $RAW_VERSION"
@@ -39,6 +42,7 @@ jobs:
           echo "TAG=v$VERSION" >> "$GITHUB_ENV"
 
       - name: Create and push git tag
+        if: github.event_name == 'workflow_dispatch'
         shell: bash
         run: |
           set -euo pipefail
