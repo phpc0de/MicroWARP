@@ -46,11 +46,15 @@ fetch_release_asset_id() {
     fi
 
     ESCAPED_ASSET_NAME=$(printf '%s' "$ASSET_NAME" | sed 's/[][(){}.^$*+?|/\\]/\\&/g')
-    ASSET_ID=$(printf '%s' "$RESP" | tr '\n' ' ' | sed -n "s/.*\"id\":\([0-9][0-9]*\),[^{}]*\"name\":\"${ESCAPED_ASSET_NAME}\".*/\1/p")
+    ASSET_ID=$(printf '%s' "$RESP" | tr '\n' ' ' | sed -n "s/.*\"id\"[[:space:]]*:[[:space:]]*\([0-9][0-9]*\)[[:space:]]*,[^{}]*\"name\"[[:space:]]*:[[:space:]]*\"${ESCAPED_ASSET_NAME}\".*/\1/p")
 
     if [ -z "$ASSET_ID" ]; then
         echo "==> [ERROR] 在 release 中未找到资产: ${ASSET_NAME}" >&2
         echo "==> [DEBUG] 请确认 wgcf release 资产名与架构匹配" >&2
+        ALL_ASSETS=$(printf '%s' "$RESP" | tr '\n' ' ' | sed 's/},{/},\n{/g' | sed -n 's/.*"name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | tr '\n' ',' | sed 's/,$//')
+        if [ -n "$ALL_ASSETS" ]; then
+            echo "==> [DEBUG] release 资产列表: $ALL_ASSETS" >&2
+        fi
         return 1
     fi
 
