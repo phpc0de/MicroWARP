@@ -39,7 +39,7 @@ services:
         max-file: "3"
         
     volumes:
-      - ./app:/app
+      - ./app:/var/lib/microwarp
       - warp-data:/etc/wireguard
 
 volumes:

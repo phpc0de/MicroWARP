@@ -190,11 +190,12 @@ case "$WARP_MODE" in
 esac
 
 WG_CONF="/etc/wireguard/wg0.conf"
-WGCF_BIN="/app/wgcf"
+WGCF_BIN="${WGCF_BIN:-/var/lib/microwarp/wgcf}"
 mkdir -p /etc/wireguard
+mkdir -p "$(dirname "$WGCF_BIN")"
 
-echo "==> [MicroWARP] 挂载检查: /app 内容如下"
-ls -la /app || true
+echo "==> [MicroWARP] 挂载检查: $(dirname "$WGCF_BIN") 内容如下"
+ls -la "$(dirname "$WGCF_BIN")" || true
 if [ -f "$WGCF_BIN" ]; then
     echo "==> [MicroWARP] 检测到缓存二进制: $WGCF_BIN"
 else
