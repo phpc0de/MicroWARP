@@ -216,14 +216,10 @@ if [ ! -f "$WG_CONF" ]; then
 
     WGCF_REPO=${WGCF_REPO:-phpc0de/wgcf}
     GITHUB_AUTH_HEADER=$(github_auth_header)
-    LOCAL_WGCF_VER=$(detect_local_wgcf_version "$WGCF_BIN" || true)
     echo "==> [MicroWARP] WGCF_REPO: ${WGCF_REPO}"
     if [ -n "${WGCF_VERSION:-}" ]; then
         echo "==> [MicroWARP] 检测到固定 WGCF_VERSION: ${WGCF_VERSION}"
         WGCF_VER=$(normalize_version "$WGCF_VERSION")
-    elif [ -n "$LOCAL_WGCF_VER" ]; then
-        WGCF_VER="$LOCAL_WGCF_VER"
-        echo "==> [MicroWARP] 未设置 WGCF_VERSION，检测到本地 wgcf，直接复用: v${WGCF_VER}"
     elif [ -n "$GITHUB_AUTH_HEADER" ]; then
         echo "==> [MicroWARP] 未设置 WGCF_VERSION，将读取 latest release"
         WGCF_VER=$(fetch_latest_wgcf_version "$WGCF_REPO" "$GITHUB_AUTH_HEADER")
@@ -237,7 +233,8 @@ if [ ! -f "$WG_CONF" ]; then
         exit 1
     fi
 
-    echo "==> [MicroWARP] 目标 wgcf 版本: v${WGCF_VER}"
+    echo "==> [MicroWARP] 检测到最新 wgcf 版本: v${WGCF_VER}"
+    LOCAL_WGCF_VER=$(detect_local_wgcf_version "$WGCF_BIN" || true)
     if [ -n "$LOCAL_WGCF_VER" ]; then
         echo "==> [MicroWARP] 检测到本地 wgcf 版本: v${LOCAL_WGCF_VER}"
     fi

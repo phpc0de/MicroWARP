@@ -39,9 +39,8 @@ services:
         max-file: "3"
         
     volumes:
-      - wgcf-cache:/app
+      - ./app:/app
       - warp-data:/etc/wireguard
 
 volumes:
-  wgcf-cache:
   warp-data:
