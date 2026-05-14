@@ -15,6 +15,35 @@ build_wgcf_download_url() {
     echo "https://github.com/${WGCF_REPO}/releases/download/v${WGCF_VER}/wgcf_${WGCF_VER}_linux_${WGCF_ARCH}"
 }
 
+normalize_version() {
+    RAW_VER=$1
+    echo "${RAW_VER#v}"
+}
+
+fetch_latest_wgcf_version() {
+    REPO=$1
+    AUTH_HEADER=$2
+    API_URL="https://api.github.com/repos/${REPO}/releases/latest"
+
+    if [ -n "$AUTH_HEADER" ]; then
+        RESP=$(curl -fsSL -H "$AUTH_HEADER" "$API_URL" || true)
+    else
+        RESP=$(curl -fsSL "$API_URL" || true)
+    fi
+
+    VER=$(printf '%s' "$RESP" | sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"v\{0,1\}\([^"]*\)".*/\1/p' | head -n 1)
+    if [ -z "$VER" ]; then
+        echo "==> [ERROR] 无法获取 ${REPO} 的 latest release 版本号"
+        echo "==> [ERROR] 请检查仓库可见性/Token权限，或显式设置 WGCF_VERSION"
+        if [ -n "$RESP" ]; then
+            echo "==> [DEBUG] GitHub API 返回: $(printf '%s' "$RESP" | tr '\n' ' ' | cut -c1-220)"
+        fi
+        exit 1
+    fi
+
+    echo "$VER"
+}
+
 configure_upstream_proxy() {
     if [ "${ENABLE_UPSTREAM_PROXY:-0}" != "1" ]; then
         return 0
@@ -74,12 +103,18 @@ if [ ! -f "$WG_CONF" ]; then
     WGCF_REPO=${WGCF_REPO:-phpc0de/wgcf}
     GITHUB_AUTH_HEADER=$(github_auth_header)
     if [ -n "${WGCF_VERSION:-}" ]; then
-        WGCF_VER="$WGCF_VERSION"
+        WGCF_VER=$(normalize_version "$WGCF_VERSION")
     elif [ -n "$GITHUB_AUTH_HEADER" ]; then
-        WGCF_VER=$(curl -sL -H "$GITHUB_AUTH_HEADER" "https://api.github.com/repos/${WGCF_REPO}/releases/latest" | grep '"tag_name"' | sed 's/.*"v\(.*\)".*/\1/')
+        WGCF_VER=$(fetch_latest_wgcf_version "$WGCF_REPO" "$GITHUB_AUTH_HEADER")
     else
-        WGCF_VER=$(curl -sL "https://api.github.com/repos/${WGCF_REPO}/releases/latest" | grep '"tag_name"' | sed 's/.*"v\(.*\)".*/\1/')
+        WGCF_VER=$(fetch_latest_wgcf_version "$WGCF_REPO" "")
     fi
+
+    if [ -z "$WGCF_VER" ]; then
+        echo "==> [ERROR] WGCF_VER 为空，终止启动"
+        exit 1
+    fi
+
     echo "==> [MicroWARP] 检测到最新 wgcf 版本: v${WGCF_VER}"
     WGCF_URL=$(build_wgcf_download_url "$WGCF_VER" "$WGCF_ARCH")
     if [ -n "$GITHUB_AUTH_HEADER" ]; then

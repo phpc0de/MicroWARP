@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   microwarp:
     image: ${MICROWARP_IMAGE:-ghcr.io/phpc0de/microwarp:latest}
