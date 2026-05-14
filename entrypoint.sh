@@ -294,7 +294,15 @@ if [ ! -f "$WG_CONF" ]; then
             echo "==> [ERROR] WARP_MODE=team 需要设置 TEAM_TOKEN"
             exit 1
         fi
-        "$WGCF_BIN" register --accept-tos --team-token "$TEAM_TOKEN" > /dev/null
+        TEAM_REGISTER_OUTPUT=$(("$WGCF_BIN" register --accept-tos --team-token "$TEAM_TOKEN") 2>&1) || {
+            echo "$TEAM_REGISTER_OUTPUT"
+            if printf '%s' "$TEAM_REGISTER_OUTPUT" | grep -qi "token is expired"; then
+                echo "==> [MicroWARP] Team token 已过期，停止重试，请更新 TEAM_TOKEN"
+                exit 0
+            fi
+            exit 1
+        }
+        echo "$TEAM_REGISTER_OUTPUT" > /dev/null
     else
         "$WGCF_BIN" register --accept-tos > /dev/null
     fi

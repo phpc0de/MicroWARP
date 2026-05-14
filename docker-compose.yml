@@ -6,7 +6,7 @@ services:
     # 2) TOKEN 需要 read:packages 权限
     # 3) 如需切换镜像，可在 .env 设置 MICROWARP_IMAGE=ghcr.io/phpc0de/microwarp:latest
     container_name: microwarp
-    restart: "no"
+    restart: on-failure:1
     ports:
       - "127.0.0.1:1080:1080"
     cap_add:
