@@ -100,6 +100,19 @@ normalize_version() {
     echo "${RAW_VER#v}"
 }
 
+detect_local_wgcf_version() {
+    WGCF_BIN=$1
+    if [ ! -x "$WGCF_BIN" ]; then
+        return 1
+    fi
+    VER_OUT=$($WGCF_BIN --version 2>/dev/null || true)
+    LOCAL_VER=$(printf '%s' "$VER_OUT" | sed -n 's/.*\([0-9]\+\.[0-9]\+\.[0-9]\+\([.-][0-9A-Za-z.-]\+\)\{0,1\}\).*/\1/p' | head -n 1)
+    if [ -z "$LOCAL_VER" ]; then
+        return 1
+    fi
+    echo "$LOCAL_VER"
+}
+
 fetch_latest_wgcf_version() {
     REPO=$1
     AUTH_HEADER=$2
@@ -177,6 +190,7 @@ case "$WARP_MODE" in
 esac
 
 WG_CONF="/etc/wireguard/wg0.conf"
+WGCF_BIN="/app/wgcf"
 mkdir -p /etc/wireguard
 
 # ==========================================
@@ -213,23 +227,40 @@ if [ ! -f "$WG_CONF" ]; then
         exit 1
     fi
 
-    echo "==> [MicroWARP] 检测到最新 wgcf 版本: v${WGCF_VER}"
-    WGCF_URL=$(build_wgcf_download_url "$WGCF_VER" "$WGCF_ARCH")
-    echo "==> [MicroWARP] 目标 wgcf 下载地址: ${WGCF_URL}"
-    if [ -n "$GITHUB_AUTH_HEADER" ]; then
-        echo "==> [MicroWARP] 使用 GitHub Token 鉴权下载 wgcf（API 资产下载模式）"
-        if ! download_wgcf_with_github_api "$WGCF_REPO" "$WGCF_VER" "$WGCF_ARCH" "$GITHUB_AUTH_HEADER" wgcf; then
-            echo "==> [ERROR] wgcf 下载失败（GitHub API 资产下载模式）"
-            exit 1
-        fi
-    else
-        echo "==> [MicroWARP] 使用匿名方式下载 wgcf"
-        if ! wget --timeout=15 -qO wgcf "$WGCF_URL"; then
-            echo "==> [ERROR] wgcf 下载失败（匿名模式），请检查 URL 或设置 GITHUB_TOKEN"
-            exit 1
-        fi
+    echo "==> [MicroWARP] 目标 wgcf 版本: v${WGCF_VER}"
+    LOCAL_WGCF_VER=$(detect_local_wgcf_version "$WGCF_BIN" || true)
+    if [ -n "$LOCAL_WGCF_VER" ]; then
+        echo "==> [MicroWARP] 检测到本地 wgcf 版本: v${LOCAL_WGCF_VER}"
     fi
-    chmod +x wgcf
+
+    if [ -n "$LOCAL_WGCF_VER" ] && [ "$LOCAL_WGCF_VER" = "$WGCF_VER" ]; then
+        echo "==> [MicroWARP] 本地 wgcf 版本匹配，跳过下载"
+    else
+        WGCF_URL=$(build_wgcf_download_url "$WGCF_VER" "$WGCF_ARCH")
+        echo "==> [MicroWARP] 目标 wgcf 下载地址: ${WGCF_URL}"
+        if [ -n "$GITHUB_AUTH_HEADER" ]; then
+            echo "==> [MicroWARP] 使用 GitHub Token 鉴权下载 wgcf（API 资产下载模式）"
+            if ! download_wgcf_with_github_api "$WGCF_REPO" "$WGCF_VER" "$WGCF_ARCH" "$GITHUB_AUTH_HEADER" "$WGCF_BIN"; then
+                echo "==> [ERROR] wgcf 下载失败（GitHub API 资产下载模式）"
+                exit 1
+            fi
+        fi
+        if [ -z "$GITHUB_AUTH_HEADER" ]; then
+            echo "==> [MicroWARP] 使用匿名方式下载 wgcf"
+            if ! wget --timeout=15 -qO "$WGCF_BIN" "$WGCF_URL"; then
+                echo "==> [ERROR] wgcf 下载失败（匿名模式），请检查 URL 或设置 GITHUB_TOKEN"
+                exit 1
+            fi
+        fi
+        chmod +x "$WGCF_BIN"
+
+        DOWNLOADED_WGCF_VER=$(detect_local_wgcf_version "$WGCF_BIN" || true)
+        if [ -z "$DOWNLOADED_WGCF_VER" ] || [ "$DOWNLOADED_WGCF_VER" != "$WGCF_VER" ]; then
+            echo "==> [ERROR] 下载后的 wgcf 版本校验失败，期望 v${WGCF_VER}，实际 v${DOWNLOADED_WGCF_VER:-unknown}"
+            exit 1
+        fi
+        echo "==> [MicroWARP] 下载并校验 wgcf 成功: v${DOWNLOADED_WGCF_VER}"
+    fi
 
     echo "==> [MicroWARP] 正在向 CF 注册设备..."
     if [ "$WARP_MODE" = "team" ]; then
@@ -237,18 +268,18 @@ if [ ! -f "$WG_CONF" ]; then
             echo "==> [ERROR] WARP_MODE=team 需要设置 TEAM_TOKEN"
             exit 1
         fi
-        ./wgcf register --accept-tos --team-token "$TEAM_TOKEN" > /dev/null
+        "$WGCF_BIN" register --accept-tos --team-token "$TEAM_TOKEN" > /dev/null
     else
-        ./wgcf register --accept-tos > /dev/null
+        "$WGCF_BIN" register --accept-tos > /dev/null
     fi
 
     echo "==> [MicroWARP] 正在生成 WireGuard 配置文件..."
-    ./wgcf generate > /dev/null
+    "$WGCF_BIN" generate > /dev/null
 
     mv wgcf-profile.conf "$WG_CONF"
 
     # 【核心安全】阅后即焚：删除注册工具和生成的账号明文文件
-    rm -f wgcf wgcf-account.toml
+    rm -f wgcf-account.toml
     echo "==> [MicroWARP] 节点配置生成成功！"
 else
     echo "==> [MicroWARP] 检测到已有持久化配置，跳过注册。"
