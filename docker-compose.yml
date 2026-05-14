@@ -7,10 +7,19 @@ services:
     # 3) 如需切换镜像，可在 .env 设置 MICROWARP_IMAGE=ghcr.io/phpc0de/microwarp:latest
     container_name: microwarp
     ports:
-      - "127.0.0.1:1080:1080"
+      - "0.0.0.0:1080:1080"
     cap_add:
       - NET_ADMIN
       - SYS_MODULE
+    networks:
+      default:
+        ipv4_address: 172.23.0.2
+    entrypoint:
+      - /bin/sh
+      - -ec
+      - |
+        ip route add ${STATIC_ROUTE_CIDR:-192.168.200.0/24} via 172.23.0.1 dev eth0 2>/dev/null || true
+        exec /app/entrypoint.sh
     sysctls:
       - net.ipv4.conf.all.src_valid_mark=1
     environment:
@@ -31,6 +40,7 @@ services:
       - WGCF_REPO=${WGCF_REPO:-phpc0de/wgcf}             # wgcf 发布仓库（私有仓库可改）
       - WGCF_VERSION=${WGCF_VERSION:-}                   # 指定固定版本（可选，不填则取 latest）
       - GITHUB_TOKEN=${GITHUB_TOKEN:-}                   # 私有 wgcf Releases 下载必填
+      - STATIC_ROUTE_CIDR=${STATIC_ROUTE_CIDR:-192.168.200.0/24} # 启动时注入静态路由目的网段
     
     # 日志轮换限制，保留3个历史文件，每个最大3MB
     logging:
@@ -45,3 +55,11 @@ services:
 
 volumes:
   warp-data:
+
+networks:
+  default:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.23.0.0/16
+          gateway: 172.23.0.1
