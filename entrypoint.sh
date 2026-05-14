@@ -193,6 +193,14 @@ WG_CONF="/etc/wireguard/wg0.conf"
 WGCF_BIN="/app/wgcf"
 mkdir -p /etc/wireguard
 
+echo "==> [MicroWARP] 挂载检查: /app 内容如下"
+ls -la /app || true
+if [ -f "$WGCF_BIN" ]; then
+    echo "==> [MicroWARP] 检测到缓存二进制: $WGCF_BIN"
+else
+    echo "==> [MicroWARP] 未检测到缓存二进制: $WGCF_BIN"
+fi
+
 # ==========================================
 # 1. 账号全自动申请与配置生成 (阅后即焚)
 # ==========================================
@@ -207,18 +215,20 @@ if [ ! -f "$WG_CONF" ]; then
     esac
 
     WGCF_REPO=${WGCF_REPO:-phpc0de/wgcf}
+    GITHUB_AUTH_HEADER=$(github_auth_header)
+    LOCAL_WGCF_VER=$(detect_local_wgcf_version "$WGCF_BIN" || true)
     echo "==> [MicroWARP] WGCF_REPO: ${WGCF_REPO}"
     if [ -n "${WGCF_VERSION:-}" ]; then
         echo "==> [MicroWARP] 检测到固定 WGCF_VERSION: ${WGCF_VERSION}"
-    else
-        echo "==> [MicroWARP] 未设置 WGCF_VERSION，将读取 latest release"
-    fi
-    GITHUB_AUTH_HEADER=$(github_auth_header)
-    if [ -n "${WGCF_VERSION:-}" ]; then
         WGCF_VER=$(normalize_version "$WGCF_VERSION")
+    elif [ -n "$LOCAL_WGCF_VER" ]; then
+        WGCF_VER="$LOCAL_WGCF_VER"
+        echo "==> [MicroWARP] 未设置 WGCF_VERSION，检测到本地 wgcf，直接复用: v${WGCF_VER}"
     elif [ -n "$GITHUB_AUTH_HEADER" ]; then
+        echo "==> [MicroWARP] 未设置 WGCF_VERSION，将读取 latest release"
         WGCF_VER=$(fetch_latest_wgcf_version "$WGCF_REPO" "$GITHUB_AUTH_HEADER")
     else
+        echo "==> [MicroWARP] 未设置 WGCF_VERSION，将读取 latest release"
         WGCF_VER=$(fetch_latest_wgcf_version "$WGCF_REPO" "")
     fi
 
@@ -228,14 +238,18 @@ if [ ! -f "$WG_CONF" ]; then
     fi
 
     echo "==> [MicroWARP] 目标 wgcf 版本: v${WGCF_VER}"
-    LOCAL_WGCF_VER=$(detect_local_wgcf_version "$WGCF_BIN" || true)
     if [ -n "$LOCAL_WGCF_VER" ]; then
         echo "==> [MicroWARP] 检测到本地 wgcf 版本: v${LOCAL_WGCF_VER}"
     fi
 
     if [ -n "$LOCAL_WGCF_VER" ] && [ "$LOCAL_WGCF_VER" = "$WGCF_VER" ]; then
-        echo "==> [MicroWARP] 本地 wgcf 版本匹配，跳过下载"
+        echo "==> [MicroWARP] 缓存命中: 本地 wgcf 版本匹配，跳过下载"
     else
+        if [ -n "$LOCAL_WGCF_VER" ]; then
+            echo "==> [MicroWARP] 缓存未命中: 本地 v${LOCAL_WGCF_VER} != 目标 v${WGCF_VER}"
+        else
+            echo "==> [MicroWARP] 缓存未命中: 本地无可用 wgcf，开始下载"
+        fi
         WGCF_URL=$(build_wgcf_download_url "$WGCF_VER" "$WGCF_ARCH")
         echo "==> [MicroWARP] 目标 wgcf 下载地址: ${WGCF_URL}"
         if [ -n "$GITHUB_AUTH_HEADER" ]; then
