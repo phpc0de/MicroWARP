@@ -205,6 +205,8 @@ esac
 
 WG_CONF="/etc/wireguard/wg0.conf"
 WGCF_BIN="${WGCF_BIN:-/var/lib/microwarp/wgcf}"
+WGCF_ACCOUNT_PERSIST="/etc/wireguard/wgcf-account.toml"
+WGCF_ACCOUNT_LOCAL_PERSIST="/var/lib/microwarp/wgcf-account.toml"
 mkdir -p /etc/wireguard
 mkdir -p "$(dirname "$WGCF_BIN")"
 
@@ -221,6 +223,14 @@ fi
 # ==========================================
 if [ ! -f "$WG_CONF" ]; then
     echo "==> [MicroWARP] 未检测到配置，正在全自动初始化 Cloudflare WARP..."
+
+    if [ -f "$WGCF_ACCOUNT_LOCAL_PERSIST" ] && [ ! -f "wgcf-account.toml" ]; then
+        cp "$WGCF_ACCOUNT_LOCAL_PERSIST" ./wgcf-account.toml
+        echo "==> [MicroWARP] 检测到本地持久化账号文件，已恢复: $WGCF_ACCOUNT_LOCAL_PERSIST"
+    elif [ -f "$WGCF_ACCOUNT_PERSIST" ] && [ ! -f "wgcf-account.toml" ]; then
+        cp "$WGCF_ACCOUNT_PERSIST" ./wgcf-account.toml
+        echo "==> [MicroWARP] 检测到持久化账号文件，已恢复: $WGCF_ACCOUNT_PERSIST"
+    fi
 
     ARCH=$(uname -m)
     case "$ARCH" in
@@ -288,32 +298,40 @@ if [ ! -f "$WG_CONF" ]; then
         echo "==> [MicroWARP] 下载并缓存 wgcf 成功: v${WGCF_VER}"
     fi
 
-    echo "==> [MicroWARP] 正在向 CF 注册设备..."
-    if [ "$WARP_MODE" = "team" ]; then
-        if [ -z "${TEAM_TOKEN:-}" ]; then
-            echo "==> [ERROR] WARP_MODE=team 需要设置 TEAM_TOKEN"
-            exit 1
-        fi
-        TEAM_REGISTER_OUTPUT=$(("$WGCF_BIN" register --accept-tos --team-token "$TEAM_TOKEN") 2>&1) || {
-            echo "$TEAM_REGISTER_OUTPUT"
-            if printf '%s' "$TEAM_REGISTER_OUTPUT" | grep -qi "token is expired"; then
-                echo "==> [MicroWARP] Team token 已过期，停止重试，请更新 TEAM_TOKEN"
-                exit 0
+    if [ ! -f "wgcf-account.toml" ]; then
+        echo "==> [MicroWARP] 正在向 CF 注册设备..."
+        if [ "$WARP_MODE" = "team" ]; then
+            if [ -z "${TEAM_TOKEN:-}" ]; then
+                echo "==> [ERROR] WARP_MODE=team 需要设置 TEAM_TOKEN"
+                exit 1
             fi
-            exit 1
-        }
-        echo "$TEAM_REGISTER_OUTPUT" > /dev/null
+            TEAM_REGISTER_OUTPUT=$("$WGCF_BIN" register --accept-tos --team-token "$TEAM_TOKEN" 2>&1) || {
+                echo "$TEAM_REGISTER_OUTPUT"
+                if printf '%s' "$TEAM_REGISTER_OUTPUT" | grep -qi "token is expired"; then
+                    echo "==> [MicroWARP] Team token 已过期，停止重试，请更新 TEAM_TOKEN"
+                    exit 0
+                fi
+                exit 1
+            }
+            echo "$TEAM_REGISTER_OUTPUT" > /dev/null
+        else
+            "$WGCF_BIN" register --accept-tos > /dev/null
+        fi
     else
-        "$WGCF_BIN" register --accept-tos > /dev/null
+        echo "==> [MicroWARP] 检测到本地账号文件，跳过注册"
     fi
 
     echo "==> [MicroWARP] 正在生成 WireGuard 配置文件..."
     "$WGCF_BIN" generate > /dev/null
 
+    cp ./wgcf-account.toml "$WGCF_ACCOUNT_PERSIST"
+    echo "==> [MicroWARP] 账号文件已持久化: $WGCF_ACCOUNT_PERSIST"
+    cp ./wgcf-account.toml "$WGCF_ACCOUNT_LOCAL_PERSIST"
+    echo "==> [MicroWARP] 账号文件已持久化到本地目录: $WGCF_ACCOUNT_LOCAL_PERSIST"
+
     mv wgcf-profile.conf "$WG_CONF"
 
-    # 【核心安全】阅后即焚：删除注册工具和生成的账号明文文件
-    rm -f wgcf-account.toml
+    # 保留账号文件用于后续复用，避免重复注册
     echo "==> [MicroWARP] 节点配置生成成功！"
 else
     echo "==> [MicroWARP] 检测到已有持久化配置，跳过注册。"
