@@ -2,7 +2,11 @@ version: '3.8'
 
 services:
   microwarp:
-    image: ghcr.io/phpc0de/microwarp:latest
+    image: ${MICROWARP_IMAGE:-ghcr.io/phpc0de/microwarp:latest}
+    # 私有 GHCR 镜像拉取说明：
+    # 1) 先执行: echo <TOKEN> | docker login ghcr.io -u <GITHUB_USER> --password-stdin
+    # 2) TOKEN 需要 read:packages 权限
+    # 3) 如需切换镜像，可在 .env 设置 MICROWARP_IMAGE=ghcr.io/phpc0de/microwarp:latest
     container_name: microwarp
     restart: always
     ports:
@@ -20,6 +24,14 @@ services:
     #   - ENDPOINT_IP=162.159.192.1:4500  # 自定义 WARP 节点 IP，用于绕过 HK/US 机房的 CF reserved 字节阻断
     #   - TAILSCALE_CIDR=100.64.0.0/10     # Tailscale 回程路由 CIDR，默认 100.64.0.0/10，非 Tailscale 场景无需设置
     #   - MICROWARP_TEST_MODE=0       # 测试模式，设为 1 时跳过所有初始化逻辑，用于 CI/调试
+    #   - ENABLE_UPSTREAM_PROXY=0     # 设为 1 开启容器上游代理
+    #   - UPSTREAM_PROXY=http://host.docker.internal:7890  # 上游代理地址，支持 http:// 或 socks5h://
+    #   - NO_PROXY=127.0.0.1,localhost,::1                 # 直连白名单（可选）
+    #   - WARP_MODE=free                # free 或 team
+    #   - TEAM_TOKEN=                   # Team 模式必填，free 模式忽略
+    #   - WGCF_REPO=phpc0de/wgcf        # wgcf 发布仓库（私有仓库可改）
+    #   - WGCF_VERSION=           # 指定固定版本（可选，不填则取 latest）
+    #   - GITHUB_TOKEN=                 # 私有 wgcf Releases 下载必填
     
     # 日志轮换限制，保留3个历史文件，每个最大3MB
     logging:

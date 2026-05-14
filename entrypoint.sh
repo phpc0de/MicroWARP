@@ -9,14 +9,51 @@ github_auth_header() {
 }
 
 build_wgcf_download_url() {
+    WGCF_REPO=${WGCF_REPO:-phpc0de/wgcf}
     WGCF_VER=$1
     WGCF_ARCH=$2
-    echo "https://github.com/phpc0de/wgcf/releases/download/v${WGCF_VER}/wgcf_${WGCF_VER}_linux_${WGCF_ARCH}"
+    echo "https://github.com/${WGCF_REPO}/releases/download/v${WGCF_VER}/wgcf_${WGCF_VER}_linux_${WGCF_ARCH}"
+}
+
+configure_upstream_proxy() {
+    if [ "${ENABLE_UPSTREAM_PROXY:-0}" != "1" ]; then
+        return 0
+    fi
+
+    if [ -z "${UPSTREAM_PROXY:-}" ]; then
+        echo "==> [ERROR] ENABLE_UPSTREAM_PROXY=1 但未设置 UPSTREAM_PROXY"
+        exit 1
+    fi
+
+    export HTTP_PROXY="$UPSTREAM_PROXY"
+    export HTTPS_PROXY="$UPSTREAM_PROXY"
+    export ALL_PROXY="$UPSTREAM_PROXY"
+    export http_proxy="$UPSTREAM_PROXY"
+    export https_proxy="$UPSTREAM_PROXY"
+    export all_proxy="$UPSTREAM_PROXY"
+
+    if [ -n "${NO_PROXY:-}" ]; then
+        export NO_PROXY
+        export no_proxy="$NO_PROXY"
+    fi
+
+    echo "==> [MicroWARP] 已开启上游代理: $UPSTREAM_PROXY"
 }
 
 if [ "${MICROWARP_TEST_MODE:-0}" = "1" ]; then
     return 0 2>/dev/null || exit 0
 fi
+
+configure_upstream_proxy
+
+WARP_MODE=${WARP_MODE:-free}
+case "$WARP_MODE" in
+    free|team) ;;
+    *)
+        echo "==> [ERROR] 不支持的 WARP_MODE: $WARP_MODE (仅支持 free/team)"
+        exit 1
+        ;;
+esac
 
 WG_CONF="/etc/wireguard/wg0.conf"
 mkdir -p /etc/wireguard
@@ -34,18 +71,34 @@ if [ ! -f "$WG_CONF" ]; then
         *) echo "==> [ERROR] 不支持的架构: $ARCH"; exit 1 ;;
     esac
 
+    WGCF_REPO=${WGCF_REPO:-phpc0de/wgcf}
     GITHUB_AUTH_HEADER=$(github_auth_header)
-    if [ -n "$GITHUB_AUTH_HEADER" ]; then
-        WGCF_VER=$(curl -sL -H "$GITHUB_AUTH_HEADER" "https://api.github.com/repos/phpc0de/wgcf/releases/latest" | grep '"tag_name"' | sed 's/.*"v\(.*\)".*/\1/')
+    if [ -n "${WGCF_VERSION:-}" ]; then
+        WGCF_VER="$WGCF_VERSION"
+    elif [ -n "$GITHUB_AUTH_HEADER" ]; then
+        WGCF_VER=$(curl -sL -H "$GITHUB_AUTH_HEADER" "https://api.github.com/repos/${WGCF_REPO}/releases/latest" | grep '"tag_name"' | sed 's/.*"v\(.*\)".*/\1/')
     else
-        WGCF_VER=$(curl -sL "https://api.github.com/repos/phpc0de/wgcf/releases/latest" | grep '"tag_name"' | sed 's/.*"v\(.*\)".*/\1/')
+        WGCF_VER=$(curl -sL "https://api.github.com/repos/${WGCF_REPO}/releases/latest" | grep '"tag_name"' | sed 's/.*"v\(.*\)".*/\1/')
     fi
     echo "==> [MicroWARP] 检测到最新 wgcf 版本: v${WGCF_VER}"
-    wget --timeout=15 -qO wgcf "$(build_wgcf_download_url "$WGCF_VER" "$WGCF_ARCH")"
+    WGCF_URL=$(build_wgcf_download_url "$WGCF_VER" "$WGCF_ARCH")
+    if [ -n "$GITHUB_AUTH_HEADER" ]; then
+        curl -fsSL --connect-timeout 15 -H "$GITHUB_AUTH_HEADER" "$WGCF_URL" -o wgcf
+    else
+        wget --timeout=15 -qO wgcf "$WGCF_URL"
+    fi
     chmod +x wgcf
 
     echo "==> [MicroWARP] 正在向 CF 注册设备..."
-    ./wgcf register --accept-tos > /dev/null
+    if [ "$WARP_MODE" = "team" ]; then
+        if [ -z "${TEAM_TOKEN:-}" ]; then
+            echo "==> [ERROR] WARP_MODE=team 需要设置 TEAM_TOKEN"
+            exit 1
+        fi
+        ./wgcf register --accept-tos --team-token "$TEAM_TOKEN" > /dev/null
+    else
+        ./wgcf register --accept-tos > /dev/null
+    fi
 
     echo "==> [MicroWARP] 正在生成 WireGuard 配置文件..."
     ./wgcf generate > /dev/null
