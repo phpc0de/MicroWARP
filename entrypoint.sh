@@ -26,29 +26,29 @@ fetch_latest_wgcf_version() {
     API_URL="https://api.github.com/repos/${REPO}/releases/latest"
     RESP_FILE=/tmp/wgcf_latest_resp.json
     HTTP_CODE_FILE=/tmp/wgcf_latest_http_code.txt
-    echo "==> [MicroWARP] 正在请求 wgcf latest 版本: ${API_URL}"
+    echo "==> [MicroWARP] 正在请求 wgcf latest 版本: ${API_URL}" >&2
 
     if [ -n "$AUTH_HEADER" ]; then
-        echo "==> [MicroWARP] 使用 GitHub Token 鉴权请求 latest 版本"
+        echo "==> [MicroWARP] 使用 GitHub Token 鉴权请求 latest 版本" >&2
         curl -sS -L -H "$AUTH_HEADER" -w "%{http_code}" -o "$RESP_FILE" "$API_URL" > "$HTTP_CODE_FILE" || true
     else
-        echo "==> [MicroWARP] 未提供 GitHub Token，使用匿名请求 latest 版本"
+        echo "==> [MicroWARP] 未提供 GitHub Token，使用匿名请求 latest 版本" >&2
         curl -sS -L -w "%{http_code}" -o "$RESP_FILE" "$API_URL" > "$HTTP_CODE_FILE" || true
     fi
 
     HTTP_CODE=$(cat "$HTTP_CODE_FILE" 2>/dev/null || true)
     RESP=$(cat "$RESP_FILE" 2>/dev/null || true)
-    echo "==> [MicroWARP] latest 请求状态码: ${HTTP_CODE:-unknown}"
+    echo "==> [MicroWARP] latest 请求状态码: ${HTTP_CODE:-unknown}" >&2
 
     VER=$(printf '%s' "$RESP" | sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"v\{0,1\}\([^"]*\)".*/\1/p' | head -n 1)
     if [ -z "$VER" ]; then
-        echo "==> [ERROR] 无法获取 ${REPO} 的 latest release 版本号"
-        echo "==> [ERROR] 请检查仓库可见性/Token权限，或显式设置 WGCF_VERSION"
+        echo "==> [ERROR] 无法获取 ${REPO} 的 latest release 版本号" >&2
+        echo "==> [ERROR] 请检查仓库可见性/Token权限，或显式设置 WGCF_VERSION" >&2
         if [ -n "$HTTP_CODE" ]; then
-            echo "==> [ERROR] latest 请求 HTTP 状态码: $HTTP_CODE"
+            echo "==> [ERROR] latest 请求 HTTP 状态码: $HTTP_CODE" >&2
         fi
         if [ -n "$RESP" ]; then
-            echo "==> [DEBUG] GitHub API 返回: $(printf '%s' "$RESP" | tr '\n' ' ' | cut -c1-220)"
+            echo "==> [DEBUG] GitHub API 返回: $(printf '%s' "$RESP" | tr '\n' ' ' | cut -c1-220)" >&2
         fi
         exit 1
     fi
