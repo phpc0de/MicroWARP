@@ -563,6 +563,15 @@ fi
 # 读取环境变量，如果未设置则使用默认值 0.0.0.0 和 1080
 LISTEN_ADDR=${BIND_ADDR:-"0.0.0.0"}
 LISTEN_PORT=${BIND_PORT:-"1080"}
+CONTAINER_IP=$(ip -4 addr show dev eth0 2>/dev/null | awk '/inet / {print $2}' | cut -d/ -f1 | head -n 1)
+
+if [ -n "$CONTAINER_IP" ]; then
+    echo "==> [MicroWARP] 容器内网 IP: ${CONTAINER_IP}"
+fi
+echo "==> [MicroWARP] 连接示例(同机容器内): socks5h://127.0.0.1:${LISTEN_PORT}"
+if [ -n "$CONTAINER_IP" ]; then
+    echo "==> [MicroWARP] 连接示例(同网段直连): socks5h://${CONTAINER_IP}:${LISTEN_PORT}"
+fi
 
 if [ -n "$SOCKS_USER" ] && [ -n "$SOCKS_PASS" ]; then
     echo "==>[MicroWARP] 🔒 身份认证已开启 (User: $SOCKS_USER)"
