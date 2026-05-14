@@ -188,6 +188,31 @@ configure_upstream_proxy() {
     echo "==> [MicroWARP] 已开启上游代理: $UPSTREAM_PROXY"
 }
 
+network_debug_dump() {
+    if [ "${DEBUG_NETWORK:-0}" != "1" ]; then
+        return 0
+    fi
+
+    echo "==> [DEBUG] ===== Network Debug Dump Begin ====="
+    echo "==> [DEBUG] ip -4 addr"
+    ip -4 addr || true
+    echo "==> [DEBUG] ip -4 route"
+    ip -4 route || true
+    echo "==> [DEBUG] ip rule"
+    ip rule || true
+    echo "==> [DEBUG] wg show"
+    wg show || true
+    echo "==> [DEBUG] wg show wg0 latest-handshakes"
+    wg show wg0 latest-handshakes || true
+    echo "==> [DEBUG] wg show wg0 endpoints"
+    wg show wg0 endpoints || true
+    echo "==> [DEBUG] curl verbose trace (1.1.1.1)"
+    curl -v --connect-timeout 5 -m 8 https://1.1.1.1/cdn-cgi/trace 2>&1 || true
+    echo "==> [DEBUG] curl verbose trace (cloudflare.com)"
+    curl -v --connect-timeout 5 -m 8 https://www.cloudflare.com/cdn-cgi/trace 2>&1 || true
+    echo "==> [DEBUG] ===== Network Debug Dump End ====="
+}
+
 if [ "${MICROWARP_TEST_MODE:-0}" = "1" ]; then
     return 0 2>/dev/null || exit 0
 fi
@@ -453,7 +478,16 @@ fi
 
 echo "==> [MicroWARP] 当前出口 IP 已成功变更为："
 # 获取最新的 CF 溯源 IP (加入 5 秒强制超时，完美替代有缺陷的 & 后台执行)
-curl -s -m 5 https://1.1.1.1/cdn-cgi/trace | grep ip= || echo "⚠️ 获取超时 (可能是底层握手延迟或节点被强阻断)"
+TRACE_OUTPUT=$(curl -s -m 5 https://1.1.1.1/cdn-cgi/trace 2>&1 || true)
+if printf '%s' "$TRACE_OUTPUT" | grep -q '^ip='; then
+    printf '%s\n' "$TRACE_OUTPUT" | grep ip=
+else
+    echo "⚠️ 获取超时 (可能是底层握手延迟或节点被强阻断)"
+    if [ -n "$TRACE_OUTPUT" ]; then
+        echo "==> [DEBUG] trace 原始输出: $TRACE_OUTPUT"
+    fi
+    network_debug_dump
+fi
 
 # ==========================================
 # 4. 启动 C 语言 SOCKS5 代理服务 (带高级参数绑定)
