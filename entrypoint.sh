@@ -213,6 +213,26 @@ network_debug_dump() {
     echo "==> [DEBUG] ===== Network Debug Dump End ====="
 }
 
+debug_log_step() {
+    if [ "${DEBUG_NETWORK:-0}" != "1" ]; then
+        return 0
+    fi
+    echo "==> [DEBUG] $1"
+}
+
+debug_file_snapshot() {
+    if [ "${DEBUG_NETWORK:-0}" != "1" ]; then
+        return 0
+    fi
+    TARGET=$1
+    if [ -f "$TARGET" ]; then
+        echo "==> [DEBUG] file snapshot: $TARGET"
+        ls -la "$TARGET" || true
+    else
+        echo "==> [DEBUG] file not found: $TARGET"
+    fi
+}
+
 if [ "${MICROWARP_TEST_MODE:-0}" = "1" ]; then
     return 0 2>/dev/null || exit 0
 fi
@@ -251,6 +271,7 @@ fi
 # ==========================================
 if [ ! -f "$WG_CONF" ]; then
     echo "==> [MicroWARP] 未检测到配置，正在全自动初始化 Cloudflare WARP..."
+    debug_log_step "初始化开始: mode=${WARP_MODE}, pwd=$(pwd), wgcf_bin=${WGCF_BIN}"
 
     if [ -f "$WGCF_ACCOUNT_LOCAL_PERSIST" ] && [ ! -f "wgcf-account.toml" ]; then
         cp "$WGCF_ACCOUNT_LOCAL_PERSIST" ./wgcf-account.toml
@@ -288,6 +309,7 @@ if [ ! -f "$WG_CONF" ]; then
         echo "==> [ERROR] WGCF_VER 为空，终止启动"
         exit 1
     fi
+    debug_log_step "版本解析完成: WGCF_VER=${WGCF_VER}, ARCH=${WGCF_ARCH}"
 
     echo "==> [MicroWARP] 检测到最新 wgcf 版本: v${WGCF_VER}"
     LOCAL_WGCF_VER=$(detect_local_wgcf_version "$WGCF_BIN" || true)
@@ -297,6 +319,8 @@ if [ ! -f "$WG_CONF" ]; then
 
     if [ -n "$LOCAL_WGCF_VER" ] && [ "$LOCAL_WGCF_VER" = "$WGCF_VER" ]; then
         echo "==> [MicroWARP] 缓存命中: 本地 wgcf 版本匹配，跳过下载"
+        debug_file_snapshot "$WGCF_BIN"
+        debug_file_snapshot "${WGCF_BIN}.version"
     else
         if [ -n "$LOCAL_WGCF_VER" ]; then
             echo "==> [MicroWARP] 缓存未命中: 本地 v${LOCAL_WGCF_VER} != 目标 v${WGCF_VER}"
@@ -327,6 +351,8 @@ if [ ! -f "$WG_CONF" ]; then
         fi
         echo "$WGCF_VER" > "${WGCF_BIN}.version"
         echo "==> [MicroWARP] 下载并缓存 wgcf 成功: v${WGCF_VER}"
+        debug_file_snapshot "$WGCF_BIN"
+        debug_file_snapshot "${WGCF_BIN}.version"
     fi
 
     if [ ! -f "wgcf-account.toml" ]; then
@@ -356,6 +382,7 @@ if [ ! -f "$WG_CONF" ]; then
             exit 1
         fi
         echo "==> [MicroWARP] 注册成功，已生成账号文件: $(pwd)/wgcf-account.toml"
+        debug_file_snapshot "./wgcf-account.toml"
     else
         echo "==> [MicroWARP] 检测到本地账号文件，跳过注册"
     fi
@@ -366,6 +393,7 @@ if [ ! -f "$WG_CONF" ]; then
     ls -la "$WGCF_ACCOUNT_LOCAL_PERSIST" 2>/dev/null || echo "==> [DEBUG] 本地挂载目录无持久化账号文件"
 
     echo "==> [MicroWARP] 正在生成 WireGuard 配置文件..."
+    debug_log_step "开始执行 wgcf generate"
     GENERATE_OUTPUT=$("$WGCF_BIN" generate 2>&1) || {
         echo "$GENERATE_OUTPUT"
         if printf '%s' "$GENERATE_OUTPUT" | grep -qi "no value given for required property enabled"; then
@@ -379,6 +407,7 @@ if [ ! -f "$WG_CONF" ]; then
         exit 1
     }
     echo "$GENERATE_OUTPUT" > /dev/null
+    debug_log_step "wgcf generate 执行完成"
 
     if [ ! -f "wgcf-profile.conf" ]; then
         echo "==> [ERROR] generate 执行后未产出 wgcf-profile.conf"
@@ -393,6 +422,7 @@ if [ ! -f "$WG_CONF" ]; then
     ls -la "$(dirname "$WGCF_BIN")" || true
 
     mv wgcf-profile.conf "$WG_CONF"
+    debug_file_snapshot "$WG_CONF"
 
     # 保留账号文件用于后续复用，避免重复注册
     echo "==> [MicroWARP] 节点配置生成成功！"
@@ -403,6 +433,7 @@ fi
 # ==========================================
 # 2. 强力洗白与内核兼容性处理 (防正则误杀版)
 # ==========================================
+debug_log_step "进入配置洗白阶段"
 
 # 1. 智能提取出纯 IPv4 地址 (防止 wgcf v2.2.30 将双栈 IP 写在同一行导致误杀)
 IPV4_ADDR=$(grep '^Address' "$WG_CONF" | grep -oE '([0-9]{1,3}\.){3}[0-9]{1,3}/[0-9]{1,2}' | head -n 1)
@@ -418,6 +449,7 @@ sed -i '/^[Mm][Tt][Uu].*/d' "$WG_CONF"
 if [ -n "$IPV4_ADDR" ]; then
     sed -i "/\[Interface\]/a Address = $IPV4_ADDR" "$WG_CONF"
 fi
+debug_log_step "IPv4提取结果: ${IPV4_ADDR:-none}"
 
 # 4. 动态注入 MTU 变量 (默认 1280)
 WG_MTU=${MTU:-1280}
@@ -441,6 +473,10 @@ if [ -n "$ENDPOINT_IP" ]; then
     echo "==>[MicroWARP] 🔀 检测到自定义 Endpoint IP，正在覆盖默认节点: $ENDPOINT_IP"
     sed -i "s/^Endpoint.*/Endpoint = $ENDPOINT_IP/g" "$WG_CONF"
 fi
+if [ "${DEBUG_NETWORK:-0}" = "1" ]; then
+    echo "==> [DEBUG] 脱敏后的 wg0.conf:"
+    sed -E 's#^(PrivateKey\s*=\s*).+#\1(hidden)#' "$WG_CONF" || true
+fi
 
 # ==========================================
 # 3. 拉起内核网卡 & 修复非对称路由
@@ -458,7 +494,16 @@ if [ -n "$ORIG_DEV" ]; then
 fi
 
 echo "==> [MicroWARP] 正在启动 Linux 内核级 wg0 网卡..."
-wg-quick up wg0 > /dev/null 2>&1
+WG_UP_OUTPUT=$(wg-quick up wg0 2>&1) || {
+    echo "==> [ERROR] wg-quick up wg0 失败"
+    echo "$WG_UP_OUTPUT"
+    echo "==> [DEBUG] 失败时 wg0 配置内容(脱敏):"
+    sed -E 's#^(PrivateKey\s*=\s*).+#\1(hidden)#' "$WG_CONF" || true
+    network_debug_dump
+    exit 1
+}
+echo "$WG_UP_OUTPUT" > /dev/null
+debug_log_step "wg-quick up wg0 成功"
 
 # 3.3 注入源地址策略路由 (Policy-Based Routing) 修复入站非对称路由劫持
 if [ -n "$ORIG_IP" ] && [ -n "$ORIG_GW" ] && [ -n "$ORIG_DEV" ]; then
@@ -467,6 +512,7 @@ if [ -n "$ORIG_IP" ] && [ -n "$ORIG_GW" ] && [ -n "$ORIG_DEV" ]; then
     ip rule add from "$ORIG_IP" table 128 priority 100 2>/dev/null || true
     ip route add table 128 default via "$ORIG_GW" dev "$ORIG_DEV" 2>/dev/null || true
 fi
+debug_log_step "策略路由注入完成"
 
 # 3.4 恢复 Tailscale 等指定内网网段的回程路由
 TAILSCALE_CIDR=${TAILSCALE_CIDR:-"100.64.0.0/10"}
@@ -475,6 +521,7 @@ if [ -n "$PRE_WARP_GW" ] && [ -n "$PRE_WARP_DEV" ]; then
         echo "==>[MicroWARP] 已为 ${TAILSCALE_CIDR} 恢复 WARP 启动前的回程路由: via ${PRE_WARP_GW} dev ${PRE_WARP_DEV}"
     fi
 fi
+debug_log_step "回程路由恢复完成"
 
 echo "==> [MicroWARP] 当前出口 IP 已成功变更为："
 # 获取最新的 CF 溯源 IP (加入 5 秒强制超时，完美替代有缺陷的 & 后台执行)
@@ -499,10 +546,12 @@ LISTEN_PORT=${BIND_PORT:-"1080"}
 if [ -n "$SOCKS_USER" ] && [ -n "$SOCKS_PASS" ]; then
     echo "==>[MicroWARP] 🔒 身份认证已开启 (User: $SOCKS_USER)"
     echo "==>[MicroWARP] 🚀 MicroSOCKS 引擎已启动，正在监听 ${LISTEN_ADDR}:${LISTEN_PORT}"
+    debug_log_step "准备启动 microsocks 认证模式"
     # 使用 exec 接管进程，实现 Zero-Overhead 的底层进程控制
     exec microsocks -i "$LISTEN_ADDR" -p "$LISTEN_PORT" -u "$SOCKS_USER" -P "$SOCKS_PASS"
 else
     echo "==> [MicroWARP] ⚠️ 未设置密码，当前为公开访问模式"
     echo "==> [MicroWARP] 🚀 MicroSOCKS 引擎已启动，正在监听 ${LISTEN_ADDR}:${LISTEN_PORT}"
+    debug_log_step "准备启动 microsocks 无认证模式"
     exec microsocks -i "$LISTEN_ADDR" -p "$LISTEN_PORT"
 fi
