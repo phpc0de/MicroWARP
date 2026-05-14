@@ -24,17 +24,29 @@ fetch_latest_wgcf_version() {
     REPO=$1
     AUTH_HEADER=$2
     API_URL="https://api.github.com/repos/${REPO}/releases/latest"
+    RESP_FILE=/tmp/wgcf_latest_resp.json
+    HTTP_CODE_FILE=/tmp/wgcf_latest_http_code.txt
+    echo "==> [MicroWARP] 正在请求 wgcf latest 版本: ${API_URL}"
 
     if [ -n "$AUTH_HEADER" ]; then
-        RESP=$(curl -fsSL -H "$AUTH_HEADER" "$API_URL" || true)
+        echo "==> [MicroWARP] 使用 GitHub Token 鉴权请求 latest 版本"
+        curl -sS -L -H "$AUTH_HEADER" -w "%{http_code}" -o "$RESP_FILE" "$API_URL" > "$HTTP_CODE_FILE" || true
     else
-        RESP=$(curl -fsSL "$API_URL" || true)
+        echo "==> [MicroWARP] 未提供 GitHub Token，使用匿名请求 latest 版本"
+        curl -sS -L -w "%{http_code}" -o "$RESP_FILE" "$API_URL" > "$HTTP_CODE_FILE" || true
     fi
+
+    HTTP_CODE=$(cat "$HTTP_CODE_FILE" 2>/dev/null || true)
+    RESP=$(cat "$RESP_FILE" 2>/dev/null || true)
+    echo "==> [MicroWARP] latest 请求状态码: ${HTTP_CODE:-unknown}"
 
     VER=$(printf '%s' "$RESP" | sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"v\{0,1\}\([^"]*\)".*/\1/p' | head -n 1)
     if [ -z "$VER" ]; then
         echo "==> [ERROR] 无法获取 ${REPO} 的 latest release 版本号"
         echo "==> [ERROR] 请检查仓库可见性/Token权限，或显式设置 WGCF_VERSION"
+        if [ -n "$HTTP_CODE" ]; then
+            echo "==> [ERROR] latest 请求 HTTP 状态码: $HTTP_CODE"
+        fi
         if [ -n "$RESP" ]; then
             echo "==> [DEBUG] GitHub API 返回: $(printf '%s' "$RESP" | tr '\n' ' ' | cut -c1-220)"
         fi
@@ -101,6 +113,12 @@ if [ ! -f "$WG_CONF" ]; then
     esac
 
     WGCF_REPO=${WGCF_REPO:-phpc0de/wgcf}
+    echo "==> [MicroWARP] WGCF_REPO: ${WGCF_REPO}"
+    if [ -n "${WGCF_VERSION:-}" ]; then
+        echo "==> [MicroWARP] 检测到固定 WGCF_VERSION: ${WGCF_VERSION}"
+    else
+        echo "==> [MicroWARP] 未设置 WGCF_VERSION，将读取 latest release"
+    fi
     GITHUB_AUTH_HEADER=$(github_auth_header)
     if [ -n "${WGCF_VERSION:-}" ]; then
         WGCF_VER=$(normalize_version "$WGCF_VERSION")
@@ -117,10 +135,23 @@ if [ ! -f "$WG_CONF" ]; then
 
     echo "==> [MicroWARP] 检测到最新 wgcf 版本: v${WGCF_VER}"
     WGCF_URL=$(build_wgcf_download_url "$WGCF_VER" "$WGCF_ARCH")
+    WGCF_BIN_HTTP_CODE_FILE=/tmp/wgcf_bin_http_code.txt
+    echo "==> [MicroWARP] 目标 wgcf 下载地址: ${WGCF_URL}"
     if [ -n "$GITHUB_AUTH_HEADER" ]; then
-        curl -fsSL --connect-timeout 15 -H "$GITHUB_AUTH_HEADER" "$WGCF_URL" -o wgcf
+        echo "==> [MicroWARP] 使用 GitHub Token 鉴权下载 wgcf"
+        curl -sS -L --connect-timeout 15 -H "$GITHUB_AUTH_HEADER" -w "%{http_code}" "$WGCF_URL" -o wgcf > "$WGCF_BIN_HTTP_CODE_FILE" || true
+        WGCF_BIN_HTTP_CODE=$(cat "$WGCF_BIN_HTTP_CODE_FILE" 2>/dev/null || true)
+        echo "==> [MicroWARP] wgcf 下载状态码: ${WGCF_BIN_HTTP_CODE:-unknown}"
+        if [ "$WGCF_BIN_HTTP_CODE" != "200" ]; then
+            echo "==> [ERROR] wgcf 下载失败，HTTP 状态码: ${WGCF_BIN_HTTP_CODE:-unknown}"
+            exit 1
+        fi
     else
-        wget --timeout=15 -qO wgcf "$WGCF_URL"
+        echo "==> [MicroWARP] 使用匿名方式下载 wgcf"
+        if ! wget --timeout=15 -qO wgcf "$WGCF_URL"; then
+            echo "==> [ERROR] wgcf 下载失败（匿名模式），请检查 URL 或设置 GITHUB_TOKEN"
+            exit 1
+        fi
     fi
     chmod +x wgcf
 
