@@ -471,7 +471,13 @@ fi
 # 【核心功能】针对 HK/US 强校验机房，注入自定义优选 Endpoint IP
 if [ -n "$ENDPOINT_IP" ]; then
     echo "==>[MicroWARP] 🔀 检测到自定义 Endpoint IP，正在覆盖默认节点: $ENDPOINT_IP"
-    sed -i "s/^Endpoint.*/Endpoint = $ENDPOINT_IP/g" "$WG_CONF"
+    if printf '%s' "$ENDPOINT_IP" | grep -Eq '^\[[0-9A-Fa-f:]+\]:[0-9]+$'; then
+        ENDPOINT_SANITIZED="$ENDPOINT_IP"
+    else
+        ENDPOINT_SANITIZED=$(printf '%s' "$ENDPOINT_IP" | sed -E 's#^([^:]+:[0-9]+):[0-9]+$#\1#')
+    fi
+    sed -i "s/^Endpoint.*/Endpoint = $ENDPOINT_SANITIZED/g" "$WG_CONF"
+    debug_log_step "Endpoint 覆盖结果: $ENDPOINT_SANITIZED"
 fi
 if [ "${DEBUG_NETWORK:-0}" = "1" ]; then
     echo "==> [DEBUG] 脱敏后的 wg0.conf:"
