@@ -14,22 +14,22 @@ services:
       - SYS_MODULE
     sysctls:
       - net.ipv4.conf.all.src_valid_mark=1
-    # environment:
-    #   - BIND_ADDR=0.0.0.0           # SOCKS5 监听地址，默认 0.0.0.0
-    #   - BIND_PORT=1080              # SOCKS5 监听端口，默认 1080
-    #   - SOCKS_USER=admin            # SOCKS5 认证用户名，留空则为无密码模式
-    #   - SOCKS_PASS=123456           # SOCKS5 认证密码，需与 SOCKS_USER 同时设置
-    #   - ENDPOINT_IP=162.159.192.1:4500  # 自定义 WARP 节点 IP，用于绕过 HK/US 机房的 CF reserved 字节阻断
-    #   - TAILSCALE_CIDR=100.64.0.0/10     # Tailscale 回程路由 CIDR，默认 100.64.0.0/10，非 Tailscale 场景无需设置
-    #   - MICROWARP_TEST_MODE=0       # 测试模式，设为 1 时跳过所有初始化逻辑，用于 CI/调试
-    #   - ENABLE_UPSTREAM_PROXY=0     # 设为 1 开启容器上游代理
-    #   - UPSTREAM_PROXY=http://host.docker.internal:7890  # 上游代理地址，支持 http:// 或 socks5h://
-    #   - NO_PROXY=127.0.0.1,localhost,::1                 # 直连白名单（可选）
-    #   - WARP_MODE=free                # free 或 team
-    #   - TEAM_TOKEN=                   # Team 模式必填，free 模式忽略
-    #   - WGCF_REPO=phpc0de/wgcf        # wgcf 发布仓库（私有仓库可改）
-    #   - WGCF_VERSION=           # 指定固定版本（可选，不填则取 latest）
-    #   - GITHUB_TOKEN=                 # 私有 wgcf Releases 下载必填
+    environment:
+      - BIND_ADDR=${BIND_ADDR:-0.0.0.0}                  # SOCKS5 监听地址，默认 0.0.0.0
+      - BIND_PORT=${BIND_PORT:-1080}                     # SOCKS5 监听端口，默认 1080
+      - SOCKS_USER=${SOCKS_USER:-}                       # SOCKS5 认证用户名（可选）
+      - SOCKS_PASS=${SOCKS_PASS:-}                       # SOCKS5 认证密码（可选）
+      - ENDPOINT_IP=${ENDPOINT_IP:-}                     # 自定义 WARP 节点 IP（可选）
+      - TAILSCALE_CIDR=${TAILSCALE_CIDR:-100.64.0.0/10}  # Tailscale 回程路由 CIDR
+      - MICROWARP_TEST_MODE=${MICROWARP_TEST_MODE:-0}    # 测试模式，1 跳过初始化
+      - ENABLE_UPSTREAM_PROXY=${ENABLE_UPSTREAM_PROXY:-0} # 设为 1 开启容器上游代理
+      - UPSTREAM_PROXY=${UPSTREAM_PROXY:-}               # 上游代理地址（http:// 或 socks5h://）
+      - NO_PROXY=${NO_PROXY:-127.0.0.1,localhost,::1}    # 直连白名单（可选）
+      - WARP_MODE=${WARP_MODE:-free}                     # free 或 team
+      - TEAM_TOKEN=${TEAM_TOKEN:-}                       # Team 模式必填，free 模式忽略
+      - WGCF_REPO=${WGCF_REPO:-phpc0de/wgcf}             # wgcf 发布仓库（私有仓库可改）
+      - WGCF_VERSION=${WGCF_VERSION:-}                   # 指定固定版本（可选，不填则取 latest）
+      - GITHUB_TOKEN=${GITHUB_TOKEN:-}                   # 私有 wgcf Releases 下载必填
     
     # 日志轮换限制，保留3个历史文件，每个最大3MB
     logging:

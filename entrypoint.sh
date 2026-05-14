@@ -4,7 +4,7 @@ set -e
 github_auth_header() {
     GITHUB_API_TOKEN=${GITHUB_TOKEN:-${GH_TOKEN:-}}
     if [ -n "$GITHUB_API_TOKEN" ]; then
-        echo "Authorization: Bearer $GITHUB_API_TOKEN"
+        echo "Authorization: token $GITHUB_API_TOKEN"
     fi
 }
 
@@ -136,14 +136,26 @@ if [ ! -f "$WG_CONF" ]; then
     echo "==> [MicroWARP] 检测到最新 wgcf 版本: v${WGCF_VER}"
     WGCF_URL=$(build_wgcf_download_url "$WGCF_VER" "$WGCF_ARCH")
     WGCF_BIN_HTTP_CODE_FILE=/tmp/wgcf_bin_http_code.txt
+    WGCF_BIN_HEADERS_FILE=/tmp/wgcf_bin_headers.txt
+    WGCF_BIN_EFFECTIVE_URL_FILE=/tmp/wgcf_bin_effective_url.txt
     echo "==> [MicroWARP] 目标 wgcf 下载地址: ${WGCF_URL}"
     if [ -n "$GITHUB_AUTH_HEADER" ]; then
         echo "==> [MicroWARP] 使用 GitHub Token 鉴权下载 wgcf"
-        curl -sS -L --connect-timeout 15 -H "$GITHUB_AUTH_HEADER" -w "%{http_code}" "$WGCF_URL" -o wgcf > "$WGCF_BIN_HTTP_CODE_FILE" || true
+        curl -sS -L --connect-timeout 15 -H "$GITHUB_AUTH_HEADER" -H "Accept: application/octet-stream" -D "$WGCF_BIN_HEADERS_FILE" -w "%{http_code}" "$WGCF_URL" -o wgcf > "$WGCF_BIN_HTTP_CODE_FILE" || true
         WGCF_BIN_HTTP_CODE=$(cat "$WGCF_BIN_HTTP_CODE_FILE" 2>/dev/null || true)
         echo "==> [MicroWARP] wgcf 下载状态码: ${WGCF_BIN_HTTP_CODE:-unknown}"
         if [ "$WGCF_BIN_HTTP_CODE" != "200" ]; then
             echo "==> [ERROR] wgcf 下载失败，HTTP 状态码: ${WGCF_BIN_HTTP_CODE:-unknown}"
+
+            curl -sS -L --connect-timeout 15 -H "$GITHUB_AUTH_HEADER" -H "Accept: application/octet-stream" -D "$WGCF_BIN_HEADERS_FILE" -o /dev/null -w "%{url_effective}" "$WGCF_URL" > "$WGCF_BIN_EFFECTIVE_URL_FILE" || true
+            WGCF_EFFECTIVE_URL=$(cat "$WGCF_BIN_EFFECTIVE_URL_FILE" 2>/dev/null || true)
+            if [ -n "$WGCF_EFFECTIVE_URL" ]; then
+                echo "==> [DEBUG] 最终跳转 URL: $WGCF_EFFECTIVE_URL"
+            fi
+            if [ -f "$WGCF_BIN_HEADERS_FILE" ]; then
+                echo "==> [DEBUG] 重定向链路状态与 Location:" 
+                awk '/^HTTP\// || /^Location:/ {print "==> [DEBUG] " $0}' "$WGCF_BIN_HEADERS_FILE"
+            fi
             exit 1
         fi
     else
