@@ -15,6 +15,82 @@ build_wgcf_download_url() {
     echo "https://github.com/${WGCF_REPO}/releases/download/v${WGCF_VER}/wgcf_${WGCF_VER}_linux_${WGCF_ARCH}"
 }
 
+fetch_release_asset_id() {
+    REPO=$1
+    VERSION=$2
+    ARCH=$3
+    AUTH_HEADER=$4
+    TAG="v${VERSION}"
+    ASSET_NAME="wgcf_${VERSION}_linux_${ARCH}"
+    API_URL="https://api.github.com/repos/${REPO}/releases/tags/${TAG}"
+    RESP_FILE=/tmp/wgcf_release_resp.json
+    HTTP_CODE_FILE=/tmp/wgcf_release_http_code.txt
+
+    echo "==> [MicroWARP] 正在请求 release 元数据: ${API_URL}" >&2
+    if [ -n "$AUTH_HEADER" ]; then
+        curl -sS -L -H "$AUTH_HEADER" -w "%{http_code}" -o "$RESP_FILE" "$API_URL" > "$HTTP_CODE_FILE" || true
+    else
+        curl -sS -L -w "%{http_code}" -o "$RESP_FILE" "$API_URL" > "$HTTP_CODE_FILE" || true
+    fi
+
+    HTTP_CODE=$(cat "$HTTP_CODE_FILE" 2>/dev/null || true)
+    RESP=$(cat "$RESP_FILE" 2>/dev/null || true)
+    echo "==> [MicroWARP] release 元数据状态码: ${HTTP_CODE:-unknown}" >&2
+
+    if [ "$HTTP_CODE" != "200" ]; then
+        echo "==> [ERROR] 获取 release 元数据失败，HTTP 状态码: ${HTTP_CODE:-unknown}" >&2
+        if [ -n "$RESP" ]; then
+            echo "==> [DEBUG] release 元数据返回: $(printf '%s' "$RESP" | tr '\n' ' ' | cut -c1-220)" >&2
+        fi
+        return 1
+    fi
+
+    ESCAPED_ASSET_NAME=$(printf '%s' "$ASSET_NAME" | sed 's/[][(){}.^$*+?|/\\]/\\&/g')
+    ASSET_ID=$(printf '%s' "$RESP" | tr '\n' ' ' | sed -n "s/.*\"id\":\([0-9][0-9]*\),[^{}]*\"name\":\"${ESCAPED_ASSET_NAME}\".*/\1/p")
+
+    if [ -z "$ASSET_ID" ]; then
+        echo "==> [ERROR] 在 release 中未找到资产: ${ASSET_NAME}" >&2
+        echo "==> [DEBUG] 请确认 wgcf release 资产名与架构匹配" >&2
+        return 1
+    fi
+
+    echo "$ASSET_ID"
+}
+
+download_wgcf_with_github_api() {
+    REPO=$1
+    VERSION=$2
+    ARCH=$3
+    AUTH_HEADER=$4
+    OUT_FILE=$5
+    ASSET_ID=$(fetch_release_asset_id "$REPO" "$VERSION" "$ARCH" "$AUTH_HEADER") || return 1
+
+    API_URL="https://api.github.com/repos/${REPO}/releases/assets/${ASSET_ID}"
+    HTTP_CODE_FILE=/tmp/wgcf_asset_http_code.txt
+    HEADERS_FILE=/tmp/wgcf_asset_headers.txt
+    EFFECTIVE_URL_FILE=/tmp/wgcf_asset_effective_url.txt
+
+    echo "==> [MicroWARP] 通过 GitHub API 下载资产: ${API_URL}"
+    curl -sS -L --connect-timeout 15 -H "$AUTH_HEADER" -H "Accept: application/octet-stream" -D "$HEADERS_FILE" -w "%{http_code}" "$API_URL" -o "$OUT_FILE" > "$HTTP_CODE_FILE" || true
+    HTTP_CODE=$(cat "$HTTP_CODE_FILE" 2>/dev/null || true)
+    echo "==> [MicroWARP] API 资产下载状态码: ${HTTP_CODE:-unknown}"
+
+    if [ "$HTTP_CODE" != "200" ]; then
+        curl -sS -L --connect-timeout 15 -H "$AUTH_HEADER" -H "Accept: application/octet-stream" -D "$HEADERS_FILE" -o /dev/null -w "%{url_effective}" "$API_URL" > "$EFFECTIVE_URL_FILE" || true
+        EFFECTIVE_URL=$(cat "$EFFECTIVE_URL_FILE" 2>/dev/null || true)
+        if [ -n "$EFFECTIVE_URL" ]; then
+            echo "==> [DEBUG] API 最终跳转 URL: $EFFECTIVE_URL"
+        fi
+        if [ -f "$HEADERS_FILE" ]; then
+            echo "==> [DEBUG] API 重定向链路状态与 Location:"
+            awk '/^HTTP\// || /^Location:/ {print "==> [DEBUG] " $0}' "$HEADERS_FILE"
+        fi
+        return 1
+    fi
+
+    return 0
+}
+
 normalize_version() {
     RAW_VER=$1
     echo "${RAW_VER#v}"
@@ -135,27 +211,11 @@ if [ ! -f "$WG_CONF" ]; then
 
     echo "==> [MicroWARP] 检测到最新 wgcf 版本: v${WGCF_VER}"
     WGCF_URL=$(build_wgcf_download_url "$WGCF_VER" "$WGCF_ARCH")
-    WGCF_BIN_HTTP_CODE_FILE=/tmp/wgcf_bin_http_code.txt
-    WGCF_BIN_HEADERS_FILE=/tmp/wgcf_bin_headers.txt
-    WGCF_BIN_EFFECTIVE_URL_FILE=/tmp/wgcf_bin_effective_url.txt
     echo "==> [MicroWARP] 目标 wgcf 下载地址: ${WGCF_URL}"
     if [ -n "$GITHUB_AUTH_HEADER" ]; then
-        echo "==> [MicroWARP] 使用 GitHub Token 鉴权下载 wgcf"
-        curl -sS -L --connect-timeout 15 -H "$GITHUB_AUTH_HEADER" -H "Accept: application/octet-stream" -D "$WGCF_BIN_HEADERS_FILE" -w "%{http_code}" "$WGCF_URL" -o wgcf > "$WGCF_BIN_HTTP_CODE_FILE" || true
-        WGCF_BIN_HTTP_CODE=$(cat "$WGCF_BIN_HTTP_CODE_FILE" 2>/dev/null || true)
-        echo "==> [MicroWARP] wgcf 下载状态码: ${WGCF_BIN_HTTP_CODE:-unknown}"
-        if [ "$WGCF_BIN_HTTP_CODE" != "200" ]; then
-            echo "==> [ERROR] wgcf 下载失败，HTTP 状态码: ${WGCF_BIN_HTTP_CODE:-unknown}"
-
-            curl -sS -L --connect-timeout 15 -H "$GITHUB_AUTH_HEADER" -H "Accept: application/octet-stream" -D "$WGCF_BIN_HEADERS_FILE" -o /dev/null -w "%{url_effective}" "$WGCF_URL" > "$WGCF_BIN_EFFECTIVE_URL_FILE" || true
-            WGCF_EFFECTIVE_URL=$(cat "$WGCF_BIN_EFFECTIVE_URL_FILE" 2>/dev/null || true)
-            if [ -n "$WGCF_EFFECTIVE_URL" ]; then
-                echo "==> [DEBUG] 最终跳转 URL: $WGCF_EFFECTIVE_URL"
-            fi
-            if [ -f "$WGCF_BIN_HEADERS_FILE" ]; then
-                echo "==> [DEBUG] 重定向链路状态与 Location:" 
-                awk '/^HTTP\// || /^Location:/ {print "==> [DEBUG] " $0}' "$WGCF_BIN_HEADERS_FILE"
-            fi
+        echo "==> [MicroWARP] 使用 GitHub Token 鉴权下载 wgcf（API 资产下载模式）"
+        if ! download_wgcf_with_github_api "$WGCF_REPO" "$WGCF_VER" "$WGCF_ARCH" "$GITHUB_AUTH_HEADER" wgcf; then
+            echo "==> [ERROR] wgcf 下载失败（GitHub API 资产下载模式）"
             exit 1
         fi
     else
