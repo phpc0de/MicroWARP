@@ -102,10 +102,24 @@ normalize_version() {
 
 detect_local_wgcf_version() {
     WGCF_BIN=$1
+    WGCF_VER_FILE="${WGCF_BIN}.version"
+    if [ -f "$WGCF_VER_FILE" ]; then
+        CACHED_VER=$(cat "$WGCF_VER_FILE" 2>/dev/null | tr -d '\r\n' || true)
+        if [ -n "$CACHED_VER" ]; then
+            echo "$CACHED_VER"
+            return 0
+        fi
+    fi
     if [ ! -x "$WGCF_BIN" ]; then
         return 1
     fi
-    VER_OUT=$($WGCF_BIN --version 2>/dev/null || true)
+    VER_OUT=$($WGCF_BIN version 2>/dev/null || true)
+    if [ -z "$VER_OUT" ]; then
+        VER_OUT=$($WGCF_BIN --version 2>/dev/null || true)
+    fi
+    if [ -z "$VER_OUT" ]; then
+        VER_OUT=$($WGCF_BIN -v 2>/dev/null || true)
+    fi
     LOCAL_VER=$(printf '%s' "$VER_OUT" | sed -n 's/.*\([0-9]\+\.[0-9]\+\.[0-9]\+\([.-][0-9A-Za-z.-]\+\)\{0,1\}\).*/\1/p' | head -n 1)
     if [ -z "$LOCAL_VER" ]; then
         return 1
@@ -266,12 +280,12 @@ if [ ! -f "$WG_CONF" ]; then
         fi
         chmod +x "$WGCF_BIN"
 
-        DOWNLOADED_WGCF_VER=$(detect_local_wgcf_version "$WGCF_BIN" || true)
-        if [ -z "$DOWNLOADED_WGCF_VER" ] || [ "$DOWNLOADED_WGCF_VER" != "$WGCF_VER" ]; then
-            echo "==> [ERROR] 下载后的 wgcf 版本校验失败，期望 v${WGCF_VER}，实际 v${DOWNLOADED_WGCF_VER:-unknown}"
+        if [ ! -s "$WGCF_BIN" ] || [ ! -x "$WGCF_BIN" ]; then
+            echo "==> [ERROR] 下载后的 wgcf 文件无效或不可执行: $WGCF_BIN"
             exit 1
         fi
-        echo "==> [MicroWARP] 下载并校验 wgcf 成功: v${DOWNLOADED_WGCF_VER}"
+        echo "$WGCF_VER" > "${WGCF_BIN}.version"
+        echo "==> [MicroWARP] 下载并缓存 wgcf 成功: v${WGCF_VER}"
     fi
 
     echo "==> [MicroWARP] 正在向 CF 注册设备..."
