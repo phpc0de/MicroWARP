@@ -18,10 +18,11 @@ services:
       - BIND_PORT=${BIND_PORT:-1080}                     # SOCKS5 监听端口，默认 1080
       - SOCKS_USER=${SOCKS_USER:-}                       # SOCKS5 认证用户名（可选）
       - SOCKS_PASS=${SOCKS_PASS:-}                       # SOCKS5 认证密码（可选）
-      - ENDPOINT_IP=${ENDPOINT_IP:-}                     # 自定义 WARP 节点 IP（可选）
+      - ENDPOINT_IP=${ENDPOINT_IP:-162.159.192.1:4500}  # 推荐优先 4500 端口
       - TAILSCALE_CIDR=${TAILSCALE_CIDR:-100.64.0.0/10}  # Tailscale 回程路由 CIDR
       - MICROWARP_TEST_MODE=${MICROWARP_TEST_MODE:-0}    # 测试模式，1 跳过初始化
       - DEBUG_NETWORK=${DEBUG_NETWORK:-0}                # 设为 1 开启底层网络诊断日志
+      - ENABLE_PBR_FIX=${ENABLE_PBR_FIX:-0}              # 设为 1 启用策略路由修复
       - ENABLE_UPSTREAM_PROXY=${ENABLE_UPSTREAM_PROXY:-0} # 设为 1 开启容器上游代理
       - UPSTREAM_PROXY=${UPSTREAM_PROXY:-}               # 上游代理地址（http:// 或 socks5h://）
       - NO_PROXY=${NO_PROXY:-127.0.0.1,localhost,::1}    # 直连白名单（可选）

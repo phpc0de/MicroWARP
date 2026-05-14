@@ -200,6 +200,8 @@ network_debug_dump() {
     ip -4 route || true
     echo "==> [DEBUG] ip rule"
     ip rule || true
+    echo "==> [DEBUG] ip route show table 51820"
+    ip route show table 51820 || true
     echo "==> [DEBUG] wg show"
     wg show || true
     echo "==> [DEBUG] wg show wg0 latest-handshakes"
@@ -512,11 +514,15 @@ echo "$WG_UP_OUTPUT" > /dev/null
 debug_log_step "wg-quick up wg0 成功"
 
 # 3.3 注入源地址策略路由 (Policy-Based Routing) 修复入站非对称路由劫持
-if [ -n "$ORIG_IP" ] && [ -n "$ORIG_GW" ] && [ -n "$ORIG_DEV" ]; then
-    echo "==> [MicroWARP] 正在注入策略路由修复非对称路由死锁 (源IP: $ORIG_IP)..."
-    # 添加容错 || true，防止部分精简版内核不支持多路由表导致启动崩溃
-    ip rule add from "$ORIG_IP" table 128 priority 100 2>/dev/null || true
-    ip route add table 128 default via "$ORIG_GW" dev "$ORIG_DEV" 2>/dev/null || true
+if [ "${ENABLE_PBR_FIX:-0}" = "1" ]; then
+    if [ -n "$ORIG_IP" ] && [ -n "$ORIG_GW" ] && [ -n "$ORIG_DEV" ]; then
+        echo "==> [MicroWARP] 正在注入策略路由修复非对称路由死锁 (源IP: $ORIG_IP)..."
+        # 添加容错 || true，防止部分精简版内核不支持多路由表导致启动崩溃
+        ip rule add from "$ORIG_IP" table 128 priority 100 2>/dev/null || true
+        ip route add table 128 default via "$ORIG_GW" dev "$ORIG_DEV" 2>/dev/null || true
+    fi
+else
+    echo "==> [MicroWARP] 已跳过策略路由修复 (ENABLE_PBR_FIX=0)"
 fi
 debug_log_step "策略路由注入完成"
 
@@ -540,6 +546,14 @@ else
         echo "==> [DEBUG] trace 原始输出: $TRACE_OUTPUT"
     fi
     network_debug_dump
+fi
+
+if [ "${DEBUG_NETWORK:-0}" = "1" ]; then
+    HS_LINE=$(wg show wg0 latest-handshakes 2>/dev/null | head -n 1 || true)
+    HS_VAL=$(printf '%s' "$HS_LINE" | awk '{print $2}')
+    if [ -z "$HS_VAL" ] || [ "$HS_VAL" = "0" ]; then
+        echo "==> [DEBUG] 握手仍为 0，建议尝试 ENDPOINT_IP=162.159.192.1:4500 或 162.159.193.1:4500"
+    fi
 fi
 
 # ==========================================
