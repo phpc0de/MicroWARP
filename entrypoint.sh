@@ -535,10 +535,11 @@ if [ -n "$PRE_WARP_GW" ] && [ -n "$PRE_WARP_DEV" ]; then
 fi
 debug_log_step "回程路由恢复完成"
 
-echo "==> [MicroWARP] 当前出口 IP 已成功变更为："
 # 获取最新的 CF 溯源 IP (加入 5 秒强制超时，完美替代有缺陷的 & 后台执行)
+echo "==> [MicroWARP] 正在检测当前出口..."
 TRACE_OUTPUT=$(curl -s -m 5 https://1.1.1.1/cdn-cgi/trace 2>&1 || true)
 if printf '%s' "$TRACE_OUTPUT" | grep -q '^ip='; then
+    echo "==> [MicroWARP] 当前出口 IP 已成功变更为："
     printf '%s\n' "$TRACE_OUTPUT" | grep ip=
 else
     echo "⚠️ 获取超时 (可能是底层握手延迟或节点被强阻断)"
