@@ -28,6 +28,7 @@ services:
       - SOCKS_USER=${SOCKS_USER:-}                       # SOCKS5 认证用户名（可选）
       - SOCKS_PASS=${SOCKS_PASS:-}                       # SOCKS5 认证密码（可选）
       - ENDPOINT_IP=${ENDPOINT_IP:-162.159.192.1:4500}  # 推荐优先 4500 端口
+      - MTU=${MTU:-1220}                                 # 降低 WG MTU，规避路径 MTU 黑洞
       - TAILSCALE_CIDR=${TAILSCALE_CIDR:-100.64.0.0/10}  # Tailscale 回程路由 CIDR
       - MICROWARP_TEST_MODE=${MICROWARP_TEST_MODE:-0}    # 测试模式，1 跳过初始化
       - DEBUG_NETWORK=${DEBUG_NETWORK:-0}                # 设为 1 开启底层网络诊断日志
